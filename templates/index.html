@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Tesla Plate Vision</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+<header class="header">
+    <div class="container header-content">
+
+        <div>
+            <span class="badge">
+                COMPUTER VISION
+            </span>
+
+            <h1>
+                Tesla Plate Vision
+            </h1>
+
+            <p>
+                Detecção e reconhecimento inteligente
+                de placas veiculares com Inteligência Artificial.
+            </p>
+        </div>
+
+        <div class="status">
+            <span class="status-dot"></span>
+            IA operacional
+        </div>
+
+    </div>
+</header>
+
+
+<main class="container">
+
+    <section class="upload-card">
+
+        <div class="section-header">
+            <div>
+                <span class="section-number">
+                    01
+                </span>
+
+                <h2>
+                    Analisar veículo
+                </h2>
+            </div>
+
+            <p>
+                Envie uma imagem contendo um veículo.
+                O sistema localizará e reconhecerá a placa.
+            </p>
+        </div>
+
+
+        <form
+            method="POST"
+            enctype="multipart/form-data"
+            id="uploadForm"
+        >
+
+            <label
+                class="upload-area"
+                id="uploadArea"
+            >
+
+                <div class="upload-icon">
+                    ↑
+                </div>
+
+                <strong>
+                    Selecione uma imagem
+                </strong>
+
+                <span>
+                    JPG, JPEG, PNG ou WEBP
+                </span>
+
+                <span
+                    class="filename"
+                    id="filename"
+                ></span>
+
+                <input
+                    type="file"
+                    name="image"
+                    id="imageInput"
+                    accept="image/*"
+                    required
+                >
+
+            </label>
+
+
+            <button
+                type="submit"
+                class="analyze-button"
+                id="analyzeButton"
+            >
+                Analisar imagem
+            </button>
+
+        </form>
+
+
+        {% if erro %}
+
+        <div class="alert error">
+            {{ erro }}
+        </div>
+
+        {% endif %}
+
+    </section>
+
+
+    {% if resultado %}
+
+    <section class="results">
+
+        <div class="section-header">
+
+            <div>
+                <span class="section-number">
+                    02
+                </span>
+
+                <h2>
+                    Resultado da análise
+                </h2>
+            </div>
+
+            <div class="latency">
+                <span>Tempo total</span>
+
+                <strong>
+                    {{ resultado.latencia_ms }} ms
+                </strong>
+            </div>
+
+        </div>
+
+
+        <div class="image-grid">
+
+            <article class="image-card">
+
+                <div class="card-header">
+                    Imagem original
+                </div>
+
+                <div class="image-wrapper">
+
+                    <img
+                        src="{{ imagem_original }}"
+                        alt="Imagem enviada"
+                    >
+
+                </div>
+
+            </article>
+
+
+            <article class="image-card">
+
+                <div class="card-header">
+                    Detecção da IA
+                </div>
+
+                <div class="image-wrapper">
+
+                    <img
+                        src="{{ url_for(
+                            'static',
+                            filename='results/' +
+                            resultado.resultado_imagem
+                        ) }}"
+                        alt="Resultado da detecção"
+                    >
+
+                </div>
+
+            </article>
+
+        </div>
+
+
+        {% if resultado.placas %}
+
+            {% for placa in resultado.placas %}
+
+            <article class="plate-result">
+
+                <div class="plate-preview">
+
+                    <span class="small-label">
+                        REGIÃO DETECTADA
+                    </span>
+
+                    <img
+                        src="{{ url_for(
+                            'static',
+                            filename='results/' +
+                            placa.crop_filename
+                        ) }}"
+                        alt="Placa recortada"
+                    >
+
+                </div>
+
+
+                <div class="plate-data">
+
+                    <span class="small-label">
+                        PLACA RECONHECIDA
+                    </span>
+
+
+                    <div class="plate-number">
+
+                        {% if placa.placa %}
+
+                            {{ placa.placa }}
+
+                        {% else %}
+
+                            NÃO RECONHECIDA
+
+                        {% endif %}
+
+                    </div>
+
+
+                    <div class="metrics-grid">
+
+                        <div class="metric">
+
+                            <span>
+                                Tipo
+                            </span>
+
+                            <strong>
+                                {{ placa.tipo }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metric">
+
+                            <span>
+                                Confiança YOLO
+                            </span>
+
+                            <strong>
+                                {{
+                                    "%.2f"|format(
+                                        placa.confianca_yolo * 100
+                                    )
+                                }}%
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metric">
+
+                            <span>
+                                Confiança OCR
+                            </span>
+
+                            <strong>
+                                {{
+                                    "%.2f"|format(
+                                        placa.confianca_ocr * 100
+                                    )
+                                }}%
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+                    {% if placa.decisao == "APROVADO AUTOMATICAMENTE" %}
+
+                    <div class="decision approved">
+
+                        <span>
+                            ✓
+                        </span>
+
+                        <div>
+                            <strong>
+                                Aprovado automaticamente
+                            </strong>
+
+                            <small>
+                                Confiança suficiente para decisão automática.
+                            </small>
+                        </div>
+
+                    </div>
+
+                    {% else %}
+
+                    <div class="decision review">
+
+                        <span>
+                            !
+                        </span>
+
+                        <div>
+                            <strong>
+                                Revisão humana
+                            </strong>
+
+                            <small>
+                                A confiança não atingiu o limite definido.
+                            </small>
+                        </div>
+
+                    </div>
+
+                    {% endif %}
+
+                </div>
+
+            </article>
+
+            {% endfor %}
+
+
+        {% else %}
+
+        <div class="alert error">
+
+            Nenhuma placa foi detectada na imagem.
+
+        </div>
+
+        {% endif %}
+
+    </section>
+
+    {% endif %}
+
+</main>
+
+
+<footer>
+
+    <div class="container footer-content">
+
+        <span>
+            Tesla Plate Vision
+        </span>
+
+        <span>
+            Projeto acadêmico · Visão Computacional
+        </span>
+
+    </div>
+
+</footer>
+
+
+<script>
+
+    const input =
+        document.getElementById("imageInput");
+
+    const filename =
+        document.getElementById("filename");
+
+    const form =
+        document.getElementById("uploadForm");
+
+    const button =
+        document.getElementById("analyzeButton");
+
+
+    input.addEventListener(
+        "change",
+        function () {
+
+            if (
+                this.files &&
+                this.files.length > 0
+            ) {
+
+                filename.textContent =
+                    this.files[0].name;
+
+            }
+
+        }
+    );
+
+
+    form.addEventListener(
+        "submit",
+        function () {
+
+            button.disabled = true;
+
+            button.textContent =
+                "Processando com IA...";
+
+        }
+    );
+
+</script>
+
+</body>
+
+</html>

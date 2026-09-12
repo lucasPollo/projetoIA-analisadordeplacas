@@ -1,0 +1,13 @@
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 1
+names:
+  0: placa
+
+roboflow:
+  workspace: lucas-pollo
+  project: license-plate-detection-zhhpa-dz49h
+  version: dataset
+  license: CC BY 4.0

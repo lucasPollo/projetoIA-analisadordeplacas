@@ -1,0 +1,34 @@
+TESLA PLATE AI - RESULTADOS DO MODELO
+
+Modelo base:
+YOLO11n pré-treinado
+
+Fine-Tuning:
+30 épocas
+
+Dataset:
+Placas brasileiras
+
+Validação:
+80 imagens
+80 instâncias de placas
+
+Precision:
+0.998 = 99.8%
+
+Recall:
+0.988 = 98.8%
+
+F1-Score aproximado:
+99.3%
+
+mAP@50:
+0.995 = 99.5%
+
+mAP@50-95:
+0.731 = 73.1%
+
+Velocidade:
+Preprocessamento: 2.4 ms
+Inferência YOLO: 86.0 ms
+Pós-processamento: 0.9 ms
