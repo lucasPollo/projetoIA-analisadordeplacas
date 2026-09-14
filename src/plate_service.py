@@ -5,10 +5,18 @@ import uuid
 
 import cv2
 import easyocr
+import numpy as np
 from ultralytics import YOLO
 
 
 class PlateRecognitionService:
+
+    VEHICLE_CLASSES = {
+        2: "Carro",
+        3: "Motocicleta",
+        5: "Ônibus",
+        7: "Caminhão",
+    }
 
     def __init__(
         self,
@@ -20,9 +28,17 @@ class PlateRecognitionService:
         classification_threshold: float = 0.50,
         ocr_candidate_threshold: float = 0.35,
     ):
-        print("Carregando YOLO...")
+        print("Carregando modelo de placas...")
 
         self.model = YOLO(model_path)
+
+        print("Carregando modelo de veículos...")
+
+        # Modelo pré-treinado para segmentar veículos.
+        # Não exige novo treinamento.
+        self.vehicle_model = YOLO(
+            "yolo11n-seg.pt"
+        )
 
         print("Carregando EasyOCR...")
 
@@ -31,33 +47,31 @@ class PlateRecognitionService:
             gpu=False
         )
 
-        self.results_dir = Path(results_dir)
+        self.results_dir = Path(
+            results_dir
+        )
 
         self.results_dir.mkdir(
             parents=True,
             exist_ok=True
         )
 
-        # Confiança mínima para o YOLO
-        # considerar algo como possível placa.
-        self.candidate_threshold = candidate_threshold
+        self.candidate_threshold = (
+            candidate_threshold
+        )
 
-        # Confiança mínima do YOLO para
-        # aprovação automática.
-        self.detection_threshold = detection_threshold
+        self.detection_threshold = (
+            detection_threshold
+        )
 
-        # Confiança mínima do OCR para
-        # aprovação automática.
-        self.ocr_threshold = ocr_threshold
+        self.ocr_threshold = (
+            ocr_threshold
+        )
 
-        # Confiança mínima para confirmar
-        # o tipo da placa.
         self.classification_threshold = (
             classification_threshold
         )
 
-        # Leituras abaixo disso nem são
-        # utilizadas como candidatas pelo OCR.
         self.ocr_candidate_threshold = (
             ocr_candidate_threshold
         )
@@ -69,10 +83,9 @@ class PlateRecognitionService:
     # ========================================================
 
     @staticmethod
-    def limpar_texto(texto: str) -> str:
-        """
-        Mantém somente letras e números.
-        """
+    def limpar_texto(
+        texto: str
+    ) -> str:
 
         if not texto:
             return ""
@@ -91,27 +104,20 @@ class PlateRecognitionService:
     def remover_textos_auxiliares(
         texto: str
     ) -> str:
-        """
-        Remove BR e BRASIL quando o OCR junta
-        esses elementos com a placa principal.
-
-        Exemplo:
-        BRAHD9HO7BRASIL
-        ->
-        AHD9HO7
-        """
 
         texto = texto.upper()
 
-        # Só remove quando há mais de 7 caracteres,
-        # evitando modificar uma placa válida.
         while len(texto) > 7:
 
-            if texto.startswith("BRASIL"):
+            if texto.startswith(
+                "BRASIL"
+            ):
                 texto = texto[6:]
                 continue
 
-            if texto.startswith("BR"):
+            if texto.startswith(
+                "BR"
+            ):
                 texto = texto[2:]
                 continue
 
@@ -119,11 +125,15 @@ class PlateRecognitionService:
 
         while len(texto) > 7:
 
-            if texto.endswith("BRASIL"):
+            if texto.endswith(
+                "BRASIL"
+            ):
                 texto = texto[:-6]
                 continue
 
-            if texto.endswith("BR"):
+            if texto.endswith(
+                "BR"
+            ):
                 texto = texto[:-2]
                 continue
 
@@ -132,22 +142,13 @@ class PlateRecognitionService:
         return texto
 
     # ========================================================
-    # IDENTIFICAÇÃO DO TIPO
+    # IDENTIFICAÇÃO DO TIPO DE PLACA
     # ========================================================
 
     @staticmethod
     def identificar_tipo_placa(
         placa: str
     ) -> str:
-        """
-        Identifica os dois formatos brasileiros.
-
-        Mercosul:
-        ABC1D23
-
-        Antiga:
-        ABC1234
-        """
 
         mercosul = (
             r"^[A-Z]{3}[0-9][A-Z][0-9]{2}$"
@@ -167,7 +168,9 @@ class PlateRecognitionService:
             antiga,
             placa
         ):
-            return "Padrão brasileiro antigo"
+            return (
+                "Padrão brasileiro antigo"
+            )
 
         return "Formato não reconhecido"
 
@@ -179,17 +182,13 @@ class PlateRecognitionService:
     def corrigir_mercosul(
         texto: str
     ) -> str:
-        """
-        Corrige erros comuns do OCR usando
-        a estrutura:
-
-        L L L N L N N
-        """
 
         if len(texto) != 7:
             return texto
 
-        caracteres = list(texto)
+        caracteres = list(
+            texto
+        )
 
         posicoes_letras = [
             0,
@@ -227,29 +226,43 @@ class PlateRecognitionService:
 
         for posicao in posicoes_letras:
 
-            caractere = caracteres[posicao]
+            caractere = (
+                caracteres[
+                    posicao
+                ]
+            )
 
-            if caractere in numero_para_letra:
-
-                caracteres[posicao] = (
-                    numero_para_letra[
-                        caractere
-                    ]
-                )
+            if (
+                caractere
+                in numero_para_letra
+            ):
+                caracteres[
+                    posicao
+                ] = numero_para_letra[
+                    caractere
+                ]
 
         for posicao in posicoes_numeros:
 
-            caractere = caracteres[posicao]
+            caractere = (
+                caracteres[
+                    posicao
+                ]
+            )
 
-            if caractere in letra_para_numero:
+            if (
+                caractere
+                in letra_para_numero
+            ):
+                caracteres[
+                    posicao
+                ] = letra_para_numero[
+                    caractere
+                ]
 
-                caracteres[posicao] = (
-                    letra_para_numero[
-                        caractere
-                    ]
-                )
-
-        return "".join(caracteres)
+        return "".join(
+            caracteres
+        )
 
     # ========================================================
     # CORREÇÕES PARA PLACA ANTIGA
@@ -259,17 +272,13 @@ class PlateRecognitionService:
     def corrigir_antiga(
         texto: str
     ) -> str:
-        """
-        Corrige erros comuns do OCR usando
-        a estrutura:
-
-        L L L N N N N
-        """
 
         if len(texto) != 7:
             return texto
 
-        caracteres = list(texto)
+        caracteres = list(
+            texto
+        )
 
         posicoes_letras = [
             0,
@@ -307,29 +316,43 @@ class PlateRecognitionService:
 
         for posicao in posicoes_letras:
 
-            caractere = caracteres[posicao]
+            caractere = (
+                caracteres[
+                    posicao
+                ]
+            )
 
-            if caractere in numero_para_letra:
-
-                caracteres[posicao] = (
-                    numero_para_letra[
-                        caractere
-                    ]
-                )
+            if (
+                caractere
+                in numero_para_letra
+            ):
+                caracteres[
+                    posicao
+                ] = numero_para_letra[
+                    caractere
+                ]
 
         for posicao in posicoes_numeros:
 
-            caractere = caracteres[posicao]
+            caractere = (
+                caracteres[
+                    posicao
+                ]
+            )
 
-            if caractere in letra_para_numero:
+            if (
+                caractere
+                in letra_para_numero
+            ):
+                caracteres[
+                    posicao
+                ] = letra_para_numero[
+                    caractere
+                ]
 
-                caracteres[posicao] = (
-                    letra_para_numero[
-                        caractere
-                    ]
-                )
-
-        return "".join(caracteres)
+        return "".join(
+            caracteres
+        )
 
     # ========================================================
     # QUANTIDADE DE CORREÇÕES
@@ -341,7 +364,10 @@ class PlateRecognitionService:
         corrigido: str
     ) -> int:
 
-        if len(original) != len(corrigido):
+        if (
+            len(original)
+            != len(corrigido)
+        ):
             return 99
 
         return sum(
@@ -354,7 +380,7 @@ class PlateRecognitionService:
         )
 
     # ========================================================
-    # AVALIA CANDIDATO DE 7 CARACTERES
+    # AVALIAR CANDIDATO
     # ========================================================
 
     def avaliar_candidato(
@@ -362,26 +388,15 @@ class PlateRecognitionService:
         texto: str,
         confianca: float
     ):
-        """
-        Primeiro testa o texto exatamente como
-        o OCR retornou.
-
-        Somente se não for válido tenta corrigir.
-
-        Isso evita um problema como:
-
-        IEB7001
-
-        ser artificialmente convertido para
-        uma placa Mercosul.
-        """
 
         texto = self.limpar_texto(
             texto
         )
 
-        texto = self.remover_textos_auxiliares(
-            texto
+        texto = (
+            self.remover_textos_auxiliares(
+                texto
+            )
         )
 
         if len(texto) != 7:
@@ -392,10 +407,6 @@ class PlateRecognitionService:
             < self.ocr_candidate_threshold
         ):
             return None
-
-        # ----------------------------------------------------
-        # 1. VERIFICA TEXTO ORIGINAL PRIMEIRO
-        # ----------------------------------------------------
 
         tipo_original = (
             self.identificar_tipo_placa(
@@ -411,17 +422,17 @@ class PlateRecognitionService:
             return {
                 "placa": texto,
                 "tipo": tipo_original,
-                "confianca": confianca,
+                "confianca":
+                    confianca,
                 "alteracoes": 0,
-                "score": confianca + 0.20,
+                "score":
+                    confianca + 0.20,
             }
 
-        # ----------------------------------------------------
-        # 2. TENTA CORREÇÃO MERCOSUL
-        # ----------------------------------------------------
-
-        mercosul = self.corrigir_mercosul(
-            texto
+        mercosul = (
+            self.corrigir_mercosul(
+                texto
+            )
         )
 
         tipo_mercosul = (
@@ -430,12 +441,10 @@ class PlateRecognitionService:
             )
         )
 
-        # ----------------------------------------------------
-        # 3. TENTA CORREÇÃO ANTIGA
-        # ----------------------------------------------------
-
-        antiga = self.corrigir_antiga(
-            texto
+        antiga = (
+            self.corrigir_antiga(
+                texto
+            )
         )
 
         tipo_antiga = (
@@ -446,7 +455,10 @@ class PlateRecognitionService:
 
         possibilidades = []
 
-        if tipo_mercosul == "Mercosul":
+        if (
+            tipo_mercosul
+            == "Mercosul"
+        ):
 
             alteracoes = (
                 self.contar_alteracoes(
@@ -456,14 +468,17 @@ class PlateRecognitionService:
             )
 
             possibilidades.append({
-                "placa": mercosul,
-                "tipo": "Mercosul",
-                "confianca": confianca,
-                "alteracoes": alteracoes,
-                "score": (
+                "placa":
+                    mercosul,
+                "tipo":
+                    "Mercosul",
+                "confianca":
+                    confianca,
+                "alteracoes":
+                    alteracoes,
+                "score":
                     confianca
-                    - alteracoes * 0.05
-                ),
+                    - alteracoes * 0.05,
             })
 
         if (
@@ -479,15 +494,17 @@ class PlateRecognitionService:
             )
 
             possibilidades.append({
-                "placa": antiga,
+                "placa":
+                    antiga,
                 "tipo":
                     "Padrão brasileiro antigo",
-                "confianca": confianca,
-                "alteracoes": alteracoes,
-                "score": (
+                "confianca":
+                    confianca,
+                "alteracoes":
+                    alteracoes,
+                "score":
                     confianca
-                    - alteracoes * 0.05
-                ),
+                    - alteracoes * 0.05,
             })
 
         if not possibilidades:
@@ -495,27 +512,20 @@ class PlateRecognitionService:
 
         return max(
             possibilidades,
-            key=lambda item: item["score"]
+            key=lambda item:
+                item["score"]
         )
 
     # ========================================================
-    # EXTRAIR PLACA DOS RESULTADOS DO OCR
+    # EXTRAIR PLACA DO OCR
     # ========================================================
 
     def extrair_placa(
         self,
         resultados_ocr
     ):
-        """
-        Procura o melhor candidato entre
-        os textos encontrados pelo OCR.
-        """
 
         candidatos = []
-
-        # ----------------------------------------------------
-        # TEXTOS INDIVIDUAIS
-        # ----------------------------------------------------
 
         for (
             _,
@@ -527,8 +537,10 @@ class PlateRecognitionService:
                 confianca
             )
 
-            texto = self.limpar_texto(
-                texto
+            texto = (
+                self.limpar_texto(
+                    texto
+                )
             )
 
             if not texto:
@@ -540,7 +552,6 @@ class PlateRecognitionService:
                 )
             )
 
-            # Ignora textos auxiliares
             if texto in {
                 "BR",
                 "BRA",
@@ -548,7 +559,6 @@ class PlateRecognitionService:
             }:
                 continue
 
-            # Se tiver exatamente 7 caracteres
             if len(texto) == 7:
 
                 resultado = (
@@ -563,8 +573,6 @@ class PlateRecognitionService:
                         resultado
                     )
 
-            # Se tiver mais de 7 caracteres,
-            # procura uma janela válida.
             elif len(texto) > 7:
 
                 for inicio in range(
@@ -588,10 +596,6 @@ class PlateRecognitionService:
                             resultado
                         )
 
-        # ----------------------------------------------------
-        # COMBINAÇÃO DOS TEXTOS
-        # ----------------------------------------------------
-
         textos_validos = []
         confiancas = []
 
@@ -601,8 +605,10 @@ class PlateRecognitionService:
             confianca
         ) in resultados_ocr:
 
-            texto = self.limpar_texto(
-                texto
+            texto = (
+                self.limpar_texto(
+                    texto
+                )
             )
 
             texto = (
@@ -626,7 +632,9 @@ class PlateRecognitionService:
             )
 
             confiancas.append(
-                float(confianca)
+                float(
+                    confianca
+                )
             )
 
         if textos_validos:
@@ -640,10 +648,15 @@ class PlateRecognitionService:
                 / len(confiancas)
             )
 
-            if len(texto_completo) >= 7:
+            if (
+                len(texto_completo)
+                >= 7
+            ):
 
                 for inicio in range(
-                    len(texto_completo) - 6
+                    len(
+                        texto_completo
+                    ) - 6
                 ):
 
                     trecho = (
@@ -666,13 +679,12 @@ class PlateRecognitionService:
                         )
 
         if not candidatos:
-
             return "", 0.0
 
-        # Escolhe o melhor candidato.
         melhor = max(
             candidatos,
-            key=lambda item: item["score"]
+            key=lambda item:
+                item["score"]
         )
 
         return (
@@ -681,19 +693,13 @@ class PlateRecognitionService:
         )
 
     # ========================================================
-    # GERA VERSÕES PARA OCR
+    # VARIAÇÕES PARA OCR
     # ========================================================
 
     @staticmethod
     def gerar_variacoes_ocr(
         imagem
     ):
-        """
-        Gera várias versões da placa.
-
-        Isso melhora principalmente placas antigas,
-        sujas, inclinadas ou com pouco contraste.
-        """
 
         variacoes = []
 
@@ -702,10 +708,6 @@ class PlateRecognitionService:
             or imagem.size == 0
         ):
             return variacoes
-
-        # ----------------------------------------------------
-        # 1. IMAGEM COMPLETA AMPLIADA
-        # ----------------------------------------------------
 
         ampliada = cv2.resize(
             imagem,
@@ -719,10 +721,6 @@ class PlateRecognitionService:
             ampliada
         )
 
-        # ----------------------------------------------------
-        # 2. ESCALA DE CINZA
-        # ----------------------------------------------------
-
         cinza = cv2.cvtColor(
             ampliada,
             cv2.COLOR_BGR2GRAY
@@ -731,10 +729,6 @@ class PlateRecognitionService:
         variacoes.append(
             cinza
         )
-
-        # ----------------------------------------------------
-        # 3. REDUÇÃO DE RUÍDO
-        # ----------------------------------------------------
 
         filtrada = cv2.bilateralFilter(
             cinza,
@@ -746,10 +740,6 @@ class PlateRecognitionService:
         variacoes.append(
             filtrada
         )
-
-        # ----------------------------------------------------
-        # 4. BINARIZAÇÃO OTSU
-        # ----------------------------------------------------
 
         _, binaria = cv2.threshold(
             filtrada,
@@ -763,10 +753,6 @@ class PlateRecognitionService:
             binaria
         )
 
-        # ----------------------------------------------------
-        # 5. VERSÃO INVERTIDA
-        # ----------------------------------------------------
-
         invertida = cv2.bitwise_not(
             binaria
         )
@@ -775,12 +761,9 @@ class PlateRecognitionService:
             invertida
         )
 
-        # ----------------------------------------------------
-        # 6. VERSÃO CORTANDO TOPO
-        # Útil para Mercosul BR / BRASIL
-        # ----------------------------------------------------
-
-        altura, largura = imagem.shape[:2]
+        altura, largura = (
+            imagem.shape[:2]
+        )
 
         inicio_y = int(
             altura * 0.16
@@ -801,9 +784,11 @@ class PlateRecognitionService:
                 interpolation=cv2.INTER_CUBIC
             )
 
-            recorte_cinza = cv2.cvtColor(
-                recorte,
-                cv2.COLOR_BGR2GRAY
+            recorte_cinza = (
+                cv2.cvtColor(
+                    recorte,
+                    cv2.COLOR_BGR2GRAY
+                )
             )
 
             variacoes.append(
@@ -813,18 +798,13 @@ class PlateRecognitionService:
         return variacoes
 
     # ========================================================
-    # EXECUTA OCR EM TODAS AS VARIAÇÕES
+    # EXECUTAR OCR
     # ========================================================
 
     def executar_ocr(
         self,
         placa_crop
     ):
-        """
-        Executa o EasyOCR em várias versões
-        e escolhe a leitura válida com maior
-        confiança.
-        """
 
         variacoes = (
             self.gerar_variacoes_ocr(
@@ -838,13 +818,15 @@ class PlateRecognitionService:
 
         for variacao in variacoes:
 
-            resultados = self.reader.readtext(
-                variacao,
-                allowlist=(
-                    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                    "0123456789"
-                ),
-                paragraph=False
+            resultados = (
+                self.reader.readtext(
+                    variacao,
+                    allowlist=(
+                        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                        "0123456789"
+                    ),
+                    paragraph=False
+                )
             )
 
             if not resultados:
@@ -863,14 +845,781 @@ class PlateRecognitionService:
                 > melhor_confianca
             ):
 
-                melhor_placa = placa
-                melhor_confianca = confianca
-                melhores_resultados = resultados
+                melhor_placa = (
+                    placa
+                )
+
+                melhor_confianca = (
+                    confianca
+                )
+
+                melhores_resultados = (
+                    resultados
+                )
 
         return (
             melhor_placa,
             melhor_confianca,
             melhores_resultados
+        )
+
+    # ========================================================
+    # DETECTAR VEÍCULOS
+    # ========================================================
+
+    def detectar_veiculos(
+        self,
+        imagem
+    ):
+        """
+        Detecta e segmenta os veículos presentes
+        na imagem usando YOLO11n-seg.
+
+        Não utiliza o modelo treinado de placas.
+        """
+
+        altura_imagem, largura_imagem = (
+            imagem.shape[:2]
+        )
+
+        resultados = (
+            self.vehicle_model.predict(
+                imagem,
+                conf=0.25,
+                classes=list(
+                    self.VEHICLE_CLASSES.keys()
+                ),
+                verbose=False
+            )
+        )
+
+        veiculos = []
+
+        for resultado in resultados:
+
+            for indice, box in enumerate(
+                resultado.boxes
+            ):
+
+                x1, y1, x2, y2 = map(
+                    int,
+                    box.xyxy[0].tolist()
+                )
+
+                x1 = max(
+                    0,
+                    min(
+                        x1,
+                        largura_imagem - 1
+                    )
+                )
+
+                y1 = max(
+                    0,
+                    min(
+                        y1,
+                        altura_imagem - 1
+                    )
+                )
+
+                x2 = max(
+                    x1 + 1,
+                    min(
+                        x2,
+                        largura_imagem
+                    )
+                )
+
+                y2 = max(
+                    y1 + 1,
+                    min(
+                        y2,
+                        altura_imagem
+                    )
+                )
+
+                classe = int(
+                    box.cls[0]
+                )
+
+                confianca = float(
+                    box.conf[0]
+                )
+
+                mascara = None
+
+                # Se o YOLO-seg forneceu máscara,
+                # convertemos o polígono para máscara
+                # no tamanho original da imagem.
+                if (
+                    resultado.masks
+                    is not None
+                    and indice
+                    < len(
+                        resultado.masks.xy
+                    )
+                ):
+
+                    poligono = (
+                        resultado.masks.xy[
+                            indice
+                        ]
+                    )
+
+                    if (
+                        poligono is not None
+                        and len(poligono) >= 3
+                    ):
+
+                        mascara = np.zeros(
+                            (
+                                altura_imagem,
+                                largura_imagem
+                            ),
+                            dtype=np.uint8
+                        )
+
+                        poligono = np.array(
+                            poligono,
+                            dtype=np.int32
+                        )
+
+                        cv2.fillPoly(
+                            mascara,
+                            [poligono],
+                            255
+                        )
+
+                veiculos.append({
+                    "bbox": [
+                        x1,
+                        y1,
+                        x2,
+                        y2
+                    ],
+                    "classe":
+                        classe,
+                    "tipo":
+                        self.VEHICLE_CLASSES.get(
+                            classe,
+                            "Veículo"
+                        ),
+                    "confianca":
+                        confianca,
+                    "mascara":
+                        mascara,
+                })
+
+        return veiculos
+
+    # ========================================================
+    # ASSOCIAR PLACA AO VEÍCULO
+    # ========================================================
+
+    @staticmethod
+    def encontrar_veiculo_da_placa(
+        bbox_placa,
+        veiculos
+    ):
+        """
+        Procura o veículo que contém o centro
+        da placa.
+
+        Isso é útil quando há mais de um veículo
+        na mesma fotografia.
+        """
+
+        if not veiculos:
+            return None
+
+        (
+            px1,
+            py1,
+            px2,
+            py2
+        ) = bbox_placa
+
+        centro_placa_x = (
+            px1 + px2
+        ) / 2
+
+        centro_placa_y = (
+            py1 + py2
+        ) / 2
+
+        candidatos = []
+
+        for veiculo in veiculos:
+
+            (
+                vx1,
+                vy1,
+                vx2,
+                vy2
+            ) = veiculo["bbox"]
+
+            if (
+                vx1
+                <= centro_placa_x
+                <= vx2
+                and
+                vy1
+                <= centro_placa_y
+                <= vy2
+            ):
+
+                area = (
+                    (vx2 - vx1)
+                    * (vy2 - vy1)
+                )
+
+                candidatos.append(
+                    (
+                        area,
+                        veiculo
+                    )
+                )
+
+        if candidatos:
+
+            candidatos.sort(
+                key=lambda item:
+                    item[0]
+            )
+
+            return candidatos[0][1]
+
+        # Se houver apenas um veículo na foto,
+        # ele é o melhor candidato mesmo que a
+        # bounding box tenha ficado um pouco curta.
+        if len(veiculos) == 1:
+            return veiculos[0]
+
+        # Com vários veículos, encontra o mais
+        # próximo do centro da placa.
+        melhor_veiculo = None
+        menor_distancia = None
+
+        for veiculo in veiculos:
+
+            (
+                vx1,
+                vy1,
+                vx2,
+                vy2
+            ) = veiculo["bbox"]
+
+            centro_veiculo_x = (
+                vx1 + vx2
+            ) / 2
+
+            centro_veiculo_y = (
+                vy1 + vy2
+            ) / 2
+
+            distancia = (
+                (
+                    centro_placa_x
+                    - centro_veiculo_x
+                ) ** 2
+                +
+                (
+                    centro_placa_y
+                    - centro_veiculo_y
+                ) ** 2
+            )
+
+            if (
+                menor_distancia is None
+                or distancia
+                < menor_distancia
+            ):
+
+                menor_distancia = (
+                    distancia
+                )
+
+                melhor_veiculo = (
+                    veiculo
+                )
+
+        return melhor_veiculo
+
+    # ========================================================
+    # ESTIMAR COR DO VEÍCULO
+    # ========================================================
+
+    @staticmethod
+    def estimar_cor_veiculo(
+        imagem,
+        veiculo
+    ):
+        """
+        Estima a cor predominante do veículo.
+
+        Utiliza:
+        - bounding box do veículo;
+        - máscara de segmentação, quando disponível;
+        - região central da carroceria;
+        - espaço de cores HSV.
+
+        O resultado é uma estimativa visual e
+        não um dado cadastral oficial.
+        """
+
+        if veiculo is None:
+            return (
+                "Não identificada",
+                0.0
+            )
+
+        (
+            x1,
+            y1,
+            x2,
+            y2
+        ) = veiculo["bbox"]
+
+        altura_imagem, largura_imagem = (
+            imagem.shape[:2]
+        )
+
+        x1 = max(
+            0,
+            min(
+                x1,
+                largura_imagem - 1
+            )
+        )
+
+        y1 = max(
+            0,
+            min(
+                y1,
+                altura_imagem - 1
+            )
+        )
+
+        x2 = max(
+            x1 + 1,
+            min(
+                x2,
+                largura_imagem
+            )
+        )
+
+        y2 = max(
+            y1 + 1,
+            min(
+                y2,
+                altura_imagem
+            )
+        )
+
+        largura = (
+            x2 - x1
+        )
+
+        altura = (
+            y2 - y1
+        )
+
+        # Região mais provável de conter
+        # pintura da carroceria.
+        roi_x1 = (
+            x1
+            + int(
+                largura * 0.08
+            )
+        )
+
+        roi_x2 = (
+            x1
+            + int(
+                largura * 0.92
+            )
+        )
+
+        roi_y1 = (
+            y1
+            + int(
+                altura * 0.28
+            )
+        )
+
+        roi_y2 = (
+            y1
+            + int(
+                altura * 0.80
+            )
+        )
+
+        roi = imagem[
+            roi_y1:roi_y2,
+            roi_x1:roi_x2
+        ]
+
+        if roi.size == 0:
+            return (
+                "Não identificada",
+                0.0
+            )
+
+        # ----------------------------------------------------
+        # MÁSCARA DE SEGMENTAÇÃO
+        # ----------------------------------------------------
+
+        mascara = (
+            veiculo.get(
+                "mascara"
+            )
+        )
+
+        if mascara is not None:
+
+            mascara_roi = mascara[
+                roi_y1:roi_y2,
+                roi_x1:roi_x2
+            ]
+
+            mascara_roi = (
+                mascara_roi > 0
+            )
+
+        else:
+
+            mascara_roi = np.ones(
+                roi.shape[:2],
+                dtype=bool
+            )
+
+        if (
+            np.count_nonzero(
+                mascara_roi
+            )
+            < 50
+        ):
+
+            mascara_roi = np.ones(
+                roi.shape[:2],
+                dtype=bool
+            )
+
+        # ----------------------------------------------------
+        # HSV
+        # ----------------------------------------------------
+
+        hsv = cv2.cvtColor(
+            roi,
+            cv2.COLOR_BGR2HSV
+        )
+
+        h = hsv[:, :, 0]
+        s = hsv[:, :, 1]
+        v = hsv[:, :, 2]
+
+        h = h[
+            mascara_roi
+        ]
+
+        s = s[
+            mascara_roi
+        ]
+
+        v = v[
+            mascara_roi
+        ]
+
+        if len(h) == 0:
+            return (
+                "Não identificada",
+                0.0
+            )
+
+        # Remove pixels praticamente sem
+        # informação visual.
+        pixels_validos = (
+            v > 20
+        )
+
+        h = h[
+            pixels_validos
+        ]
+
+        s = s[
+            pixels_validos
+        ]
+
+        v = v[
+            pixels_validos
+        ]
+
+        if len(h) == 0:
+            return (
+                "Preto",
+                0.5
+            )
+
+        # ----------------------------------------------------
+        # VERIFICA SE O VEÍCULO É COLORIDO
+        # ----------------------------------------------------
+
+        mascara_colorida = (
+            (s >= 55)
+            &
+            (v >= 45)
+        )
+
+        proporcao_colorida = float(
+            np.mean(
+                mascara_colorida
+            )
+        )
+
+        # ----------------------------------------------------
+        # CORES COLORIDAS
+        # ----------------------------------------------------
+
+        if (
+            proporcao_colorida
+            >= 0.18
+        ):
+
+            tons = h[
+                mascara_colorida
+            ].astype(
+                np.int32
+            )
+
+            saturacoes = s[
+                mascara_colorida
+            ].astype(
+                np.float32
+            )
+
+            valores = v[
+                mascara_colorida
+            ].astype(
+                np.float32
+            )
+
+            # Pixels mais saturados têm mais
+            # peso na decisão.
+            pesos = (
+                saturacoes
+                / 255.0
+            ) * (
+                0.5
+                + valores
+                / 510.0
+            )
+
+            histograma = np.bincount(
+                tons,
+                weights=pesos,
+                minlength=180
+            ).astype(
+                np.float32
+            )
+
+            # Suavização circular do Hue.
+            expandido = np.concatenate([
+                histograma[-4:],
+                histograma,
+                histograma[:4]
+            ])
+
+            kernel = np.ones(
+                9,
+                dtype=np.float32
+            )
+
+            suavizado = np.convolve(
+                expandido,
+                kernel,
+                mode="same"
+            )
+
+            suavizado = (
+                suavizado[
+                    4:-4
+                ]
+            )
+
+            hue_dominante = int(
+                np.argmax(
+                    suavizado
+                )
+            )
+
+            total_histograma = float(
+                np.sum(
+                    suavizado
+                )
+            )
+
+            if total_histograma > 0:
+
+                confianca_cor = float(
+                    suavizado[
+                        hue_dominante
+                    ]
+                    / total_histograma
+                )
+
+                # Escala para valor mais intuitivo.
+                confianca_cor = min(
+                    1.0,
+                    confianca_cor * 8
+                )
+
+            else:
+
+                confianca_cor = (
+                    proporcao_colorida
+                )
+
+            valor_mediano = float(
+                np.median(
+                    valores
+                )
+            )
+
+            # Vermelho
+            if (
+                hue_dominante < 10
+                or hue_dominante >= 170
+            ):
+                return (
+                    "Vermelho",
+                    confianca_cor
+                )
+
+            # Laranja / Marrom
+            if (
+                10
+                <= hue_dominante
+                < 22
+            ):
+
+                if valor_mediano < 130:
+
+                    return (
+                        "Marrom",
+                        confianca_cor
+                    )
+
+                return (
+                    "Laranja",
+                    confianca_cor
+                )
+
+            # Amarelo
+            if (
+                22
+                <= hue_dominante
+                < 38
+            ):
+                return (
+                    "Amarelo",
+                    confianca_cor
+                )
+
+            # Verde
+            if (
+                38
+                <= hue_dominante
+                < 85
+            ):
+                return (
+                    "Verde",
+                    confianca_cor
+                )
+
+            # Azul
+            if (
+                85
+                <= hue_dominante
+                < 135
+            ):
+                return (
+                    "Azul",
+                    confianca_cor
+                )
+
+            # Roxo
+            if (
+                135
+                <= hue_dominante
+                < 170
+            ):
+                return (
+                    "Roxo",
+                    confianca_cor
+                )
+
+        # ----------------------------------------------------
+        # PRETO / BRANCO / CINZA / PRATA
+        # ----------------------------------------------------
+
+        mascara_neutra = (
+            s < 65
+        )
+
+        if (
+            np.count_nonzero(
+                mascara_neutra
+            )
+            > 0
+        ):
+
+            valores_neutros = v[
+                mascara_neutra
+            ]
+
+            # Percentil superior reduz a influência
+            # de pneus e vidros pretos.
+            luminosidade = float(
+                np.percentile(
+                    valores_neutros,
+                    65
+                )
+            )
+
+            proporcao_neutra = float(
+                np.mean(
+                    mascara_neutra
+                )
+            )
+
+        else:
+
+            luminosidade = float(
+                np.percentile(
+                    v,
+                    65
+                )
+            )
+
+            proporcao_neutra = 0.5
+
+        if luminosidade < 80:
+
+            return (
+                "Preto",
+                proporcao_neutra
+            )
+
+        if luminosidade > 190:
+
+            return (
+                "Branco",
+                proporcao_neutra
+            )
+
+        return (
+            "Cinza / Prata",
+            proporcao_neutra
         )
 
     # ========================================================
@@ -909,11 +1658,9 @@ class PlateRecognitionService:
         image_path: str
     ):
 
-        inicio = time.perf_counter()
-
-        # ----------------------------------------------------
-        # CARREGA A IMAGEM
-        # ----------------------------------------------------
+        inicio = (
+            time.perf_counter()
+        )
 
         image = cv2.imread(
             image_path
@@ -926,54 +1673,132 @@ class PlateRecognitionService:
                 "a imagem."
             )
 
-        original = image.copy()
+        original = (
+            image.copy()
+        )
 
-        # ----------------------------------------------------
-        # YOLO
-        # ----------------------------------------------------
+        # ====================================================
+        # DETECTAR VEÍCULOS
+        # ====================================================
 
-        resultados = self.model.predict(
-            image,
-            conf=self.candidate_threshold,
-            iou=0.50,
-            verbose=False
+        veiculos = (
+            self.detectar_veiculos(
+                original
+            )
+        )
+
+        # ====================================================
+        # DETECTAR PLACAS
+        # ====================================================
+
+        resultados = (
+            self.model.predict(
+                image,
+                conf=self.candidate_threshold,
+                iou=0.50,
+                verbose=False
+            )
         )
 
         placas = []
 
-        # ----------------------------------------------------
-        # PROCESSA AS DETECÇÕES
-        # ----------------------------------------------------
+        # ====================================================
+        # PROCESSAR PLACAS
+        # ====================================================
 
         for resultado in resultados:
 
             for box in resultado.boxes:
 
-                # Coordenadas
                 x1, y1, x2, y2 = map(
                     int,
-                    box.xyxy[0].tolist()
+                    box.xyxy[
+                        0
+                    ].tolist()
                 )
 
                 confianca_yolo = float(
                     box.conf[0]
                 )
 
-                # --------------------------------------------
-                # RECORTE
-                # --------------------------------------------
+                bbox_placa = [
+                    x1,
+                    y1,
+                    x2,
+                    y2
+                ]
+
+                # ============================================
+                # ENCONTRAR VEÍCULO DA PLACA
+                # ============================================
+
+                veiculo_associado = (
+                    self.encontrar_veiculo_da_placa(
+                        bbox_placa,
+                        veiculos
+                    )
+                )
+
+                # ============================================
+                # ESTIMAR COR
+                # ============================================
+
+                if veiculo_associado:
+
+                    (
+                        cor_veiculo,
+                        confianca_cor
+                    ) = (
+                        self.estimar_cor_veiculo(
+                            original,
+                            veiculo_associado
+                        )
+                    )
+
+                    tipo_veiculo = (
+                        veiculo_associado[
+                            "tipo"
+                        ]
+                    )
+
+                    confianca_veiculo = (
+                        veiculo_associado[
+                            "confianca"
+                        ]
+                    )
+
+                else:
+
+                    cor_veiculo = (
+                        "Não identificada"
+                    )
+
+                    confianca_cor = 0.0
+
+                    tipo_veiculo = (
+                        "Não identificado"
+                    )
+
+                    confianca_veiculo = 0.0
+
+                # ============================================
+                # RECORTE DA PLACA
+                # ============================================
 
                 placa_crop = original[
                     y1:y2,
                     x1:x2
                 ]
 
-                if placa_crop.size == 0:
+                if (
+                    placa_crop.size
+                    == 0
+                ):
                     continue
 
-                # --------------------------------------------
+                # ============================================
                 # OCR
-                # --------------------------------------------
+                # ============================================
 
                 (
                     placa_texto,
@@ -983,9 +1808,9 @@ class PlateRecognitionService:
                     placa_crop
                 )
 
-                # --------------------------------------------
-                # IDENTIFICAÇÃO DO TIPO
-                # --------------------------------------------
+                # ============================================
+                # TIPO DE PLACA
+                # ============================================
 
                 if (
                     placa_texto
@@ -1005,9 +1830,9 @@ class PlateRecognitionService:
                         "Formato não confirmado"
                     )
 
-                # --------------------------------------------
+                # ============================================
                 # DECISÃO
-                # --------------------------------------------
+                # ============================================
 
                 decisao = (
                     self.tomar_decisao(
@@ -1017,9 +1842,9 @@ class PlateRecognitionService:
                     )
                 )
 
-                # --------------------------------------------
-                # SALVA RECORTE
-                # --------------------------------------------
+                # ============================================
+                # SALVAR RECORTE
+                # ============================================
 
                 crop_filename = (
                     f"placa_"
@@ -1032,20 +1857,22 @@ class PlateRecognitionService:
                 )
 
                 cv2.imwrite(
-                    str(crop_path),
+                    str(
+                        crop_path
+                    ),
                     placa_crop
                 )
 
-                # --------------------------------------------
-                # COR DA DETECÇÃO
-                # --------------------------------------------
+                # ============================================
+                # COR DA BOUNDING BOX
+                # ============================================
 
                 if (
                     decisao
                     == "APROVADO AUTOMATICAMENTE"
                 ):
 
-                    cor = (
+                    cor_box = (
                         0,
                         200,
                         0
@@ -1053,15 +1880,15 @@ class PlateRecognitionService:
 
                 else:
 
-                    cor = (
+                    cor_box = (
                         0,
                         165,
                         255
                     )
 
-                # --------------------------------------------
-                # BOUNDING BOX
-                # --------------------------------------------
+                # ============================================
+                # BOUNDING BOX DA PLACA
+                # ============================================
 
                 cv2.rectangle(
                     image,
@@ -1073,13 +1900,13 @@ class PlateRecognitionService:
                         x2,
                         y2
                     ),
-                    cor,
+                    cor_box,
                     3
                 )
 
-                # --------------------------------------------
-                # TEXTO NA IMAGEM
-                # --------------------------------------------
+                # ============================================
+                # TEXTO DA DETECÇÃO
+                # ============================================
 
                 if placa_texto:
 
@@ -1107,13 +1934,13 @@ class PlateRecognitionService:
                     ),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
-                    cor,
+                    cor_box,
                     2
                 )
 
-                # --------------------------------------------
-                # RESULTADO DA PLACA
-                # --------------------------------------------
+                # ============================================
+                # RESULTADO
+                # ============================================
 
                 placas.append({
                     "placa":
@@ -1121,6 +1948,24 @@ class PlateRecognitionService:
 
                     "tipo":
                         tipo,
+
+                    "cor_veiculo":
+                        cor_veiculo,
+
+                    "confianca_cor":
+                        round(
+                            confianca_cor,
+                            4
+                        ),
+
+                    "tipo_veiculo":
+                        tipo_veiculo,
+
+                    "confianca_veiculo":
+                        round(
+                            confianca_veiculo,
+                            4
+                        ),
 
                     "confianca_yolo":
                         round(
@@ -1149,7 +1994,7 @@ class PlateRecognitionService:
                 })
 
         # ====================================================
-        # SALVA IMAGEM COMPLETA
+        # SALVAR IMAGEM COMPLETA
         # ====================================================
 
         result_filename = (
@@ -1163,7 +2008,9 @@ class PlateRecognitionService:
         )
 
         cv2.imwrite(
-            str(result_path),
+            str(
+                result_path
+            ),
             image
         )
 
@@ -1180,7 +2027,7 @@ class PlateRecognitionService:
         )
 
         # ====================================================
-        # RETORNO PARA O FLASK
+        # RETORNO PARA FLASK
         # ====================================================
 
         return {

@@ -9,7 +9,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Tesla Plate Vision</title>
+    <title>Tesla Detector de Placas</title>
 
     <link
         rel="stylesheet"
@@ -24,22 +24,18 @@
 
         <div>
             <span class="badge">
-                COMPUTER VISION
+                VISÃO COMPUTACIONAL
             </span>
 
             <h1>
-                Tesla Plate Vision
+                Tesla Detector de Placas
             </h1>
 
             <p>
                 Detecção e reconhecimento inteligente
-                de placas veiculares com Inteligência Artificial.
+                de placas veiculares e estimativa visual
+                da cor do veículo com Inteligência Artificial.
             </p>
-        </div>
-
-        <div class="status">
-            <span class="status-dot"></span>
-            IA operacional
         </div>
 
     </div>
@@ -63,7 +59,8 @@
 
             <p>
                 Envie uma imagem contendo um veículo.
-                O sistema localizará e reconhecerá a placa.
+                O sistema localizará a placa, reconhecerá
+                os caracteres e estimará a cor do veículo.
             </p>
         </div>
 
@@ -146,7 +143,9 @@
             </div>
 
             <div class="latency">
-                <span>Tempo total</span>
+                <span>
+                    Tempo total
+                </span>
 
                 <strong>
                     {{ resultado.latencia_ms }} ms
@@ -251,11 +250,32 @@
                         <div class="metric">
 
                             <span>
-                                Tipo
+                                Tipo da placa
                             </span>
 
                             <strong>
                                 {{ placa.tipo }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metric">
+
+                            <span>
+                                Cor estimada
+                            </span>
+
+                            <strong>
+                                {% if placa.cor_veiculo %}
+
+                                    {{ placa.cor_veiculo }}
+
+                                {% else %}
+
+                                    Não identificada
+
+                                {% endif %}
                             </strong>
 
                         </div>
@@ -366,11 +386,6 @@
 <footer>
 
     <div class="container footer-content">
-
-        <span>
-            Tesla Plate Vision
-        </span>
-
         <span>
             Projeto acadêmico · Visão Computacional
         </span>
