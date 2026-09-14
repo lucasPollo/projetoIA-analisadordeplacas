@@ -61,3 +61,84 @@ Na primeira execução, o sistema também pode baixar automaticamente o modelo:
 ```text
 yolo11n-seg.pt
 ```
+
+## API REST
+
+Além da interface Web, o projeto também possui uma API REST para permitir que outros sistemas enviem uma imagem e recebam o resultado da análise em formato JSON.
+
+### Endpoint
+
+```text
+POST /api/analyze
+```
+
+Com o Flask rodando, o endereço completo é:
+
+```text
+http://127.0.0.1:5000/api/analyze
+```
+
+### Como executar a API
+
+Primeiro, inicie normalmente o projeto:
+
+```powershell
+python app.py
+```
+
+Depois, em outro terminal, envie uma imagem para a API.
+
+Exemplo com `curl`:
+
+```powershell
+curl.exe -X POST -F "image=@test_images\mercosul.jpg" http://127.0.0.1:5000/api/analyze
+```
+
+Troque:
+
+```text
+test_images\mercosul.jpg
+```
+
+pelo caminho da imagem que deseja analisar.
+
+### Exemplo de resposta
+
+```json
+{
+  "latencia_ms": 63997.34,
+  "placas": [
+    {
+      "placa": "ITA1354",
+      "tipo": "Padrão brasileiro antigo",
+      "cor_veiculo": "Laranja",
+      "confianca_yolo": 0.9074,
+      "confianca_ocr": 0.7658,
+      "confianca_veiculo": 0.3842,
+      "confianca_cor": 0.837,
+      "tipo_veiculo": "Carro",
+      "decisao": "APROVADO AUTOMATICAMENTE"
+    }
+  ]
+}
+```
+
+A API utiliza o mesmo pipeline da interface Web:
+
+```text
+Imagem
+  ↓
+YOLO placas
+  ↓
+OCR
+  ↓
+YOLO veículo
+  ↓
+Estimativa de cor
+  ↓
+Validação
+  ↓
+Decisão
+  ↓
+Resposta JSON
+```

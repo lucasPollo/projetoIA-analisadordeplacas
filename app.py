@@ -5,7 +5,8 @@ from flask import (
     Flask,
     render_template,
     request,
-    url_for
+    url_for,
+    jsonify
 )
 
 from src.plate_service import (
@@ -171,6 +172,126 @@ def index():
         erro=erro
     )
 
+@app.route(
+    "/api/analyze",
+    methods=["POST"]
+)
+def api_analyze():
+
+    arquivo = request.files.get(
+        "image"
+    )
+
+    # ==========================================
+    # VALIDAÇÕES
+    # ==========================================
+
+    if not arquivo:
+
+        return jsonify({
+            "erro":
+                "Nenhuma imagem enviada."
+        }), 400
+
+    if not arquivo.filename:
+
+        return jsonify({
+            "erro":
+                "Arquivo sem nome."
+        }), 400
+
+    if not arquivo_permitido(
+        arquivo.filename
+    ):
+
+        return jsonify({
+            "erro":
+                "Formato de arquivo não permitido."
+        }), 400
+
+    # ==========================================
+    # SALVAR IMAGEM
+    # ==========================================
+
+    extensao = (
+        arquivo.filename
+        .rsplit(".", 1)[1]
+        .lower()
+    )
+
+    filename = (
+        f"{uuid.uuid4().hex}."
+        f"{extensao}"
+    )
+
+    caminho = (
+        UPLOAD_DIR
+        / filename
+    )
+
+    arquivo.save(
+        str(caminho)
+    )
+
+    try:
+
+        # ======================================
+        # EXECUTA IA
+        # ======================================
+
+        resultado = (
+            service.processar(
+                str(caminho)
+            )
+        )
+
+        # ======================================
+        # URLs DOS RESULTADOS
+        # ======================================
+
+        resultado["resultado_url"] = (
+            url_for(
+                "static",
+                filename=(
+                    "results/"
+                    + resultado[
+                        "resultado_imagem"
+                    ]
+                ),
+                _external=True
+            )
+        )
+
+        for placa in resultado[
+            "placas"
+        ]:
+
+            placa["crop_url"] = (
+                url_for(
+                    "static",
+                    filename=(
+                        "results/"
+                        + placa[
+                            "crop_filename"
+                        ]
+                    ),
+                    _external=True
+                )
+            )
+
+        return jsonify(
+            resultado
+        ), 200
+
+    except Exception as erro:
+
+        return jsonify({
+            "erro":
+                "Erro ao processar imagem.",
+
+            "detalhes":
+                str(erro)
+        }), 500
 
 if __name__ == "__main__":
 
